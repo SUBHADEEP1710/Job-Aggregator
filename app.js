@@ -1,9 +1,9 @@
 let currentPage = 1;
-const resultsPerPage = 10;
+const resultsPerPage = 10; // Display 10 jobs per page
 
-async function fetchData(query, page) {
+async function fetchData(query) {
     const encodedQuery = encodeURIComponent(query);
-    const url = `https://jsearch.p.rapidapi.com/search?query=${encodedQuery}&page=${page}&num_pages=3`;
+    const url = `https://jsearch.p.rapidapi.com/search?query=${encodedQuery}&page=1&num_pages=5`; // fetch up to 5 pages
     const options = {
         method: 'GET',
         headers: {
@@ -13,36 +13,38 @@ async function fetchData(query, page) {
     };
 
     try {
+        showLoader(true);
         const response = await fetch(url, options);
         const data = await response.json();
-        displayResults(data, page);
+        displayResults(data.data);
     } catch (error) {
         console.error(error);
+        document.getElementById("results").textContent = "An error occurred. Please try again.";
+    } finally {
+        showLoader(false);
     }
 }
 
-function displayResults(data, page) {
+function displayResults(jobs) {
     const resultsDiv = document.getElementById("results");
-    resultsDiv.innerHTML = ""; // Clear previous results
+    resultsDiv.innerHTML = "";
 
-    if (data && data.data && data.data.length > 0) {
-        const startIndex = (page - 1) * resultsPerPage;
-        const endIndex = startIndex + resultsPerPage;
-        const displayedData = data.data.slice(startIndex, endIndex);
+    if (jobs && jobs.length > 0) {
+        const start = (currentPage - 1) * resultsPerPage;
+        const end = start + resultsPerPage;
+        const jobsToDisplay = jobs.slice(start, end); // Only display jobs for the current page
 
         const table = document.createElement("table");
         const headerRow = table.insertRow();
-        const headers = ["Job Title", "Employer", "Location", "Apply Link", "Site"];
+        const headers = ["JOB TITLE", "COMPANY", "LOCATION", "LINK", "SITE"];
 
-        // Create table headers
         headers.forEach(headerText => {
             const header = document.createElement("th");
             header.textContent = headerText;
             headerRow.appendChild(header);
         });
 
-        // Add job data to the table
-        displayedData.forEach(job => {
+        jobsToDisplay.forEach(job => {
             const row = table.insertRow();
             const titleCell = row.insertCell();
             const employerCell = row.insertCell();
@@ -53,23 +55,31 @@ function displayResults(data, page) {
             titleCell.textContent = job.job_title || "N/A";
             employerCell.textContent = job.employer_name || "N/A";
             locationCell.textContent = `${job.job_city || "N/A"}, ${job.job_state || "N/A"}, ${job.job_country || "N/A"}`;
-            applyLinkCell.innerHTML = `<a href="${job.job_apply_link}" target="_blank">Apply</a>` || "N/A";
+            applyLinkCell.innerHTML = `<a href="${job.job_apply_link}" target="_blank">Apply</a>`;
             siteCell.textContent = job.job_publisher || "N/A";
         });
 
         resultsDiv.appendChild(table);
+        createPagination(jobs);
+    } else {
+        resultsDiv.textContent = "No results found.";
+    }
+}
 
-        // Pagination controls
-        const totalPages = Math.ceil(data.data.length / resultsPerPage);
-        const paginationDiv = document.createElement("div");
-        paginationDiv.classList.add("pagination");
+function createPagination(jobs) {
+    const paginationDiv = document.createElement("div");
+    paginationDiv.classList.add("pagination");
 
+    const totalPages = Math.ceil(jobs.length / resultsPerPage);
+
+    if (totalPages > 1) {
         const prevButton = document.createElement("button");
         prevButton.textContent = "<<";
-        prevButton.addEventListener("click", function() {
+        prevButton.disabled = currentPage === 1;
+        prevButton.addEventListener("click", () => {
             if (currentPage > 1) {
                 currentPage--;
-                fetchData(document.getElementById("searchQuery").value, currentPage);
+                displayResults(jobs);
             }
         });
         paginationDiv.appendChild(prevButton);
@@ -77,47 +87,38 @@ function displayResults(data, page) {
         for (let i = 1; i <= totalPages; i++) {
             const pageButton = document.createElement("button");
             pageButton.textContent = i;
-            if (i === currentPage) {
-                pageButton.classList.add("active"); // Add active class to current page
-            }
-            pageButton.addEventListener("click", function() {
+            if (i === currentPage) pageButton.classList.add("active");
+            pageButton.addEventListener("click", () => {
                 currentPage = i;
-                fetchData(document.getElementById("searchQuery").value, currentPage);
-                updatePageButtons(); // Update page buttons after clicking
+                displayResults(jobs);
             });
             paginationDiv.appendChild(pageButton);
         }
 
         const nextButton = document.createElement("button");
         nextButton.textContent = ">>";
-        nextButton.addEventListener("click", function() {
+        nextButton.disabled = currentPage === totalPages;
+        nextButton.addEventListener("click", () => {
             if (currentPage < totalPages) {
                 currentPage++;
-                fetchData(document.getElementById("searchQuery").value, currentPage);
+                displayResults(jobs);
             }
         });
         paginationDiv.appendChild(nextButton);
-
-        resultsDiv.appendChild(paginationDiv);
-    } else {
-        resultsDiv.textContent = "No results found.";
     }
+
+    const resultsDiv = document.getElementById("results");
+    resultsDiv.appendChild(paginationDiv);
 }
 
-function updatePageButtons() {
-    const paginationDiv = document.querySelector(".pagination");
-    const pageButtons = paginationDiv.querySelectorAll("button");
-    pageButtons.forEach(button => {
-        button.classList.remove("active"); // Remove active class from all buttons
-        if (parseInt(button.textContent) === currentPage) {
-            button.classList.add("active"); // Add active class to current page button
-        }
-    });
+function showLoader(show) {
+    document.getElementById("loader").style.display = show ? "block" : "none";
 }
 
-document.getElementById("searchButton").addEventListener("click", function() {
+document.getElementById("searchButton").addEventListener("click", () => {
     const query = document.getElementById("searchQuery").value;
     if (query) {
-        fetchData(query, currentPage);
+        currentPage = 1; // Reset to first page on new search
+        fetchData(query);
     }
 });
